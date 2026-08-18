@@ -48,20 +48,19 @@ function processarSimulacao(e) {
     const sistema = document.getElementById('sistema').value;
     const taxaAnual = parseFloat(document.getElementById('taxaAnual').value);
 
-    // 1. Validação de Entrada Mínima (Normalmente 20% do imóvel)
+    // Validação da Entrada Mínima (Normalmente 20% do valor do imóvel)
     const entradaMinima = valorImovel * 0.20;
-    if (valorEntrada < entradaMinima) {
-        alert(`A entrada mínima exigida pelos bancos é de 20% (${formatarMoeda(entradaMinima)}). Por favor, ajuste o valor.`);
-        return;
-    }
+    const entradaAbaixoDoMinimo = valorEntrada < entradaMinima;
 
-    const valorFinanciado = valorImovel - valorEntrada;
+    let valorFinanciado = valorImovel - valorEntrada;
+    if (valorFinanciado <= 0) valorFinanciado = 0; // Previne saldo negativo se entrada for maior que o imóvel
+
     const prazoMeses = prazoAnos * 12;
 
-    // 2. Taxa Mensal Nominal (Regra de mercado para financiamento imobiliário)
+    // Taxa Mensal Nominal (Regra de mercado para financiamento imobiliário)
     const taxaMensal = (taxaAnual / 100) / 12;
 
-    // 3. Encargos acessórios estimados (Seguros MIP/DFI + Taxa de Administração)
+    // Encargos acessórios estimados (Seguros MIP/DFI + Taxa de Administração)
     const encargoEstimado = (valorFinanciado * 0.00025) + (valorImovel * 0.00005) + 25.00;
 
     let resultado;
@@ -74,11 +73,11 @@ function processarSimulacao(e) {
     const primeiraParcelaTotal = resultado.primeiraParcela + encargoEstimado;
     const ultimaParcelaTotal = resultado.ultimaParcela + encargoEstimado;
 
-    // 4. Verificação de Comprometimento de Renda (Máximo de 30%)
+    // Verificação de Comprometimento de Renda (Máximo de 30%)
     const limiteRenda = renda * 0.30;
     const excedeRenda = primeiraParcelaTotal > limiteRenda;
 
-    // --- ENVIO DOS DADOS PARA O SHEETMONKEY ---
+    // --- ENVIO DOS DADOS PARA O SHEETMONKEY (Executa SEMPRE para capturar o lead) ---
     const dadosLead = {
         nome: nome,
         email: email,
@@ -91,6 +90,7 @@ function processarSimulacao(e) {
         sistema: sistema,
         primeiraParcela: primeiraParcelaTotal.toFixed(2),
         ultimaParcela: ultimaParcelaTotal.toFixed(2),
+        entradaAbaixoDoMinimo: entradaAbaixoDoMinimo ? "SIM" : "NÃO",
         comprometeuRenda: excedeRenda ? "SIM" : "NÃO",
         dataHora: new Date().toLocaleString('pt-BR')
     };
@@ -130,18 +130,27 @@ function processarSimulacao(e) {
         </div>
     `;
 
+    // Exibe aviso explicativo se a entrada for menor que 20%
+    if (entradaAbaixoDoMinimo) {
+        cardsContainer.innerHTML += `
+            <div style="grid-column: 1 / -1; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; margin-top: 10px;">
+                ⚠️ <strong>Atenção:</strong> A entrada informada (${formatarMoeda(valorEntrada)}) é menor que os 20% recomendados pelas regras bancárias (${formatarMoeda(entradaMinima)}). Fale com nosso consultor no WhatsApp para analisar opções de subsídio, uso do FGTS ou composição de entrada.
+            </div>
+        `;
+    }
+
     // Exibe aviso se ultrapassar 30% da renda informada
     if (excedeRenda) {
         cardsContainer.innerHTML += `
-            <div style="grid-column: 1 / -1; background-color: #fff3cd; color: #856404; padding: 10px 15px; border-radius: 4px; font-size: 0.9rem; margin-top: 10px;">
-                ⚠️ <strong>Atenção:</strong> A 1ª parcela excede 30% da sua renda informada (${formatarMoeda(limiteRenda)}). Fale com nosso consultor para avaliar composições de renda ou aumentar o prazo.
+            <div style="grid-column: 1 / -1; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; margin-top: 10px;">
+                ⚠️ <strong>Atenção:</strong> A 1ª parcela excede 30% da renda informada (${formatarMoeda(limiteRenda)}). Podemos ajudar você a compor renda com mais familiares no atendimento.
             </div>
         `;
     }
 
     // Prepara o link dinâmico do WhatsApp
     const mensagemWhatsApp = encodeURIComponent(
-        `Olá! Me chamo ${nome}. Fiz uma simulação para um imóvel de ${formatarMoeda(valorImovel)} (entrada de ${formatarMoeda(valorEntrada)} e 1ª parcela de ${formatarMoeda(primeiraParcelaTotal)}). Gostaria de analisar meu crédito!`
+        `Olá! Me chamo ${nome}. Fiz uma simulação de financiamento no valor de ${formatarMoeda(valorImovel)} e gostaria de tirar dúvidas sobre minha análise de crédito.`
     );
     
     document.getElementById('linkWhatsapp').href = `https://wa.me/5524988114415?text=${mensagemWhatsApp}`;
