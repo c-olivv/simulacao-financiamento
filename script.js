@@ -1,199 +1,156 @@
-// ==========================================
-// CLASSE DE CÁLCULO (FINANCIAMENTO SAC/PRICE)
-// ==========================================
-class Financiar {
-    constructor(vP, i, n) {
-        this.vP = vP;                 // Valor Financiado
-        this.i = i;                   // Taxa de Juros ao mês (%)
-        this.n = n;                   // Prazo em meses
-        this.pmt = [];                // Array com as prestações
-        this.a = 0;                   // Amortização
-        this.totalJuros = 0;          // Total de juros
-        this.totalPago = 0;           // Total pago ao final
-        this.listaSacText = "";       // Lista de parcelas em texto
-        this.listaSacHTML = "";       // Lista de parcelas em HTML
-    }
+// URL do SheetMonkey configurada
+const ENDPOINT_SHEETMONKEY = "https://api.sheetmonkey.io/form/v5HTKnEFHJkrhqmVCAhDi1";
 
-    // Trata valores vindos formatados como moeda (ex: "200.000,00")
-    tratarMascaraReal() {
-        if (typeof this.vP === 'string') {
-            this.vP = this.vP.replace(/\./g, "").replace(",", ".");
-        }
-        if (typeof this.i === 'string') {
-            this.i = this.i.replace(/\./g, "").replace(",", ".");
-        }
-    }
-
-    // Converte tipos para cálculos matemáticos
-    formataDados() {
-        this.vP = parseFloat(this.vP);
-        this.i = parseFloat(this.i) / 100; // Converte porcentagem para decimal
-        this.n = parseInt(this.n);
-    }
-
-    // Formata o número para padrão R$
-    formataMascara(label, valor) {
-        let formato = { minimumFractionDigits: 2, style: 'currency', currency: label };
-        return valor.toLocaleString('pt-BR', formato);
-    }
-
-    calculaAmortizacao() {
-        this.a = this.vP / this.n;
-        return this.a;
-    }
-
-    // Cálculo pela Tabela PRICE
-    financiarPrice() {
-        let prestacao = this.vP * (Math.pow((1 + this.i), this.n) * this.i) / (Math.pow((1 + this.i), this.n) - 1);
-        this.pmt = [prestacao];
-        return this.formataMascara('BRL', this.pmt[0]);
-    }
-
-    // Cálculo pela Tabela SAC
-    financiarSac() {
-        this.calculaAmortizacao();
-        this.pmt = [];
-        this.listaSacText = "";
-        this.listaSacHTML = "";
-
-        for (let y = 0; y < this.n; y++) {
-            let prestacao = this.a + this.i * (this.vP - (y * this.a));
-            this.pmt.push(prestacao);
-            this.listaSacText += (y + 1) + "ª prestação: " + this.formataMascara('BRL', prestacao) + "\n\r";
-            this.listaSacHTML += (y + 1) + "ª prestação: " + this.formataMascara('BRL', prestacao) + "<br>";
-        }
-    }
-
-    calculaTotalPagoPrice() {
-        this.totalPago = this.pmt[0] * this.n;
-        return this.formataMascara('BRL', this.totalPago);
-    }
-
-    calculaTotalJurosPrice() {
-        if (this.totalPago === 0) this.calculaTotalPagoPrice();
-        this.totalJuros = this.totalPago - this.vP;
-        return this.formataMascara('BRL', this.totalJuros);
-    }
-
-    calculaTotalPagoSac() {
-        this.totalPago = 0;
-        for (let p = 0; p < this.n; p++) {
-            this.totalPago += this.pmt[p];
-        }
-        return this.formataMascara('BRL', this.totalPago);
-    }
-
-    calculaTotalJurosSac() {
-        if (this.totalPago === 0) this.calculaTotalPagoSac();
-        this.totalJuros = this.totalPago - this.vP;
-        return this.formataMascara('BRL', this.totalJuros);
-    }
+// Converte taxa anual nominal/efetiva para taxa mensal equivalente
+function converterTaxaAnualParaMensal(taxaAnualPercentual) {
+    const taxaAnualDecimal = taxaAnualPercentual / 100;
+    return Math.pow(1 + taxaAnualDecimal, 1 / 12) - 1;
 }
 
-// ==========================================
-// CONFIGURAÇÃO E INTEGRAÇÃO DO SIMULADOR
-// ==========================================
-
-const ENDPOINT_SHEETMONKEY = 'https://api.sheetmonkey.io/form/SEU_ENDPOINT_AQUI';
-
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('formSimulador');
-    if (form) {
-        form.addEventListener('submit', processarSimulacao);
-    }
-});
-
-// Helper para converter entradas com ponto/vírgula em número seguro
-function parseValorSeguro(valor) {
-    if (!valor) return 0;
-    return parseFloat(valor.toString().replace(/\./g, "").replace(",", ".")) || 0;
+// Formatação de valores para moeda brasileira (R$)
+function formatarMoeda(valor) {
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-async function processarSimulacao(e) {
+// Cálculo do SAC
+function calcularSAC(valorFinanciado, taxaAnualPercentual, prazoMeses) {
+    const i = converterTaxaAnualParaMensal(taxaAnualPercentual);
+    const amortizacaoConstante = valorFinanciado / prazoMeses;
+    
+    let saldoDevedor = valorFinanciado;
+    let totalJuros = 0;
+    
+    const primeiraParcelaBase = amortizacaoConstante + (saldoDevedor * i);
+    const ultimaParcelaBase = amortizacaoConstante + (amortizacaoConstante * i);
+
+    for (let mes = 1; mes <= prazoMeses; mes++) {
+        const jurosMes = saldoDevedor * i;
+        totalJuros += jurosMes;
+        saldoDevedor -= amortizacaoConstante;
+    }
+
+    return {
+        primeiraParcela: primeiraParcelaBase,
+        ultimaParcela: ultimaParcelaBase,
+        totalJuros: totalJuros,
+        totalPago: valorFinanciado + totalJuros
+    };
+}
+
+// Cálculo da Tabela Price
+function calcularPrice(valorFinanciado, taxaAnualPercentual, prazoMeses) {
+    const i = converterTaxaAnualParaMensal(taxaAnualPercentual);
+    const fator = Math.pow(1 + i, prazoMeses);
+    const parcelaFixa = valorFinanciado * ((i * fator) / (fator - 1));
+    
+    const totalPago = parcelaFixa * prazoMeses;
+    const totalJuros = totalPago - valorFinanciado;
+
+    return {
+        primeiraParcela: parcelaFixa,
+        ultimaParcela: parcelaFixa,
+        totalJuros: totalJuros,
+        totalPago: totalPago
+    };
+}
+
+// Processa o formulário e envia os dados
+function processarSimulacao(e) {
     e.preventDefault();
 
-    // 1. Leitura dos inputs
-    const valorImovel = parseValorSeguro(document.getElementById('valorImovel').value);
-    const entradaInformada = parseValorSeguro(document.getElementById('valorEntrada').value);
-    const rendaMensal = parseValorSeguro(document.getElementById('rendaMensal').value);
-    const taxaAnual = parseValorSeguro(document.getElementById('taxaAnual').value);
-    const prazoAnos = parseInt(document.getElementById('prazoAnos').value) || 0;
+    // Leitura dos dados do formulário
+    const nome = document.getElementById('nome').value;
+    const email = document.getElementById('email').value;
+    const telefone = document.getElementById('telefone').value;
+    const renda = parseFloat(document.getElementById('renda').value) || 0;
+    const valorImovel = parseFloat(document.getElementById('valorImovel').value) || 0;
+    const valorEntrada = parseFloat(document.getElementById('valorEntrada').value) || 0;
+    const prazoAnos = parseInt(document.getElementById('prazoAnos').value);
+    const sistema = document.getElementById('sistema').value;
+    const taxaAnual = parseFloat(document.getElementById('taxaAnual').value);
 
+    const valorFinanciado = valorImovel - valorEntrada;
     const prazoMeses = prazoAnos * 12;
-    const taxaMensal = taxaAnual / 12; // Em porcentagem ao mês
-    const i = taxaMensal / 100;        // Em decimal ao mês
 
-    // 2. Cálculo do limite da parcela (30% da renda)
-    const parcelaMaxima = rendaMensal * 0.30;
-
-    // 3. Cálculo do valor financiado máximo permitido no SAC
-    // No SAC: Parcela_1 = (vP / n) + (vP * i) = vP * (1/n + i)
-    // Logo: vP_Max = Parcela_1_Max / (1/n + i)
-    const fatorSac = (1 / prazoMeses) + i;
-    const valorFinanciadoMaximo = parcelaMaxima / fatorSac;
-
-    // Entrada necessária para cobrir a limitação da renda
-    let entradaCalculada = valorImovel - valorFinanciadoMaximo;
-
-    // Se a entrada calculada for menor que a informada, usa a informada pelo usuário
-    let entradaFinal = Math.max(entradaCalculada, entradaInformada);
-
-    // Garante que a entrada não supere o valor total do imóvel
-    if (entradaFinal > valorImovel) {
-        entradaFinal = valorImovel;
+    if (valorFinanciado <= 0) {
+        alert('O valor da entrada não pode ser igual ou maior que o valor do imóvel.');
+        return;
     }
 
-    const valorFinanciadoFinal = valorImovel - entradaFinal;
+    // Estimativa de Seguros e Taxas (MIP + DFI + Taxa Adm)
+    const encargoEstimado = (valorFinanciado * 0.00025) + (valorImovel * 0.00005) + 25.00;
 
-    // 4. Executa a classe de cálculo com o valor financiado ajustado
-    const simulacao = new Financiar(valorFinanciadoFinal, taxaMensal, prazoMeses);
-    simulacao.formataDados();
-    simulacao.financiarSac();
+    let resultado;
+    if (sistema === 'SAC') {
+        resultado = calcularSAC(valorFinanciado, taxaAnual, prazoMeses);
+    } else {
+        resultado = calcularPrice(valorFinanciado, taxaAnual, prazoMeses);
+    }
 
-    const entradaFormatada = simulacao.formataMascara('BRL', entradaFinal);
-    const primeiraParcela = simulacao.formataMascara('BRL', simulacao.pmt[0]);
-    const ultimaParcela = simulacao.formataMascara('BRL', simulacao.pmt[simulacao.pmt.length - 1]);
-    const totalPago = simulacao.calculaTotalPagoSac();
-    const totalJuros = simulacao.calculaTotalJurosSac();
+    const primeiraParcelaTotal = resultado.primeiraParcela + encargoEstimado;
+    const ultimaParcelaTotal = resultado.ultimaParcela + encargoEstimado;
 
-    // 5. Monta o objeto de Lead para o SheetMonkey
+    // --- ENVIO DOS DADOS PARA O SHEETMONKEY ---
     const dadosLead = {
-        Nome: document.getElementById('nome').value,
-        Email: document.getElementById('email').value,
-        Telefone: document.getElementById('telefone').value,
-        ValorImovel: simulacao.formataMascara('BRL', valorImovel),
-        RendaMensal: simulacao.formataMascara('BRL', rendaMensal),
-        EntradaCalculada: entradaFormatada,
-        ValorFinanciado: simulacao.formataMascara('BRL', simulacao.vP),
-        PrazoAnos: prazoAnos,
-        PrimeiraParcela: primeiraParcela,
-        UltimaParcela: ultimaParcela,
-        TotalPago: totalPago,
-        TotalJuros: totalJuros,
-        DataEnvio: new Date().toLocaleString('pt-BR')
+        nome: nome,
+        email: email,
+        telefone: telefone,
+        renda: renda,
+        valorImovel: valorImovel,
+        valorEntrada: valorEntrada,
+        valorFinanciado: valorFinanciado,
+        prazoAnos: prazoAnos,
+        sistema: sistema,
+        primeiraParcela: primeiraParcelaTotal.toFixed(2),
+        ultimaParcela: ultimaParcelaTotal.toFixed(2),
+        dataHora: new Date().toLocaleString('pt-BR')
     };
 
-    // 6. Envio para o SheetMonkey
-    try {
-        await fetch(ENDPOINT_SHEETMONKEY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosLead)
-        });
-    } catch (error) {
-        console.error('Erro ao enviar para o SheetMonkey:', error);
-    }
+    fetch(ENDPOINT_SHEETMONKEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dadosLead)
+    })
+    .then(response => {
+        if (response.ok) {
+            console.log("Lead salvo com sucesso no SheetMonkey!");
+        } else {
+            console.error("Erro ao enviar dados para o SheetMonkey.");
+        }
+    })
+    .catch(err => console.error("Erro de rede ao salvar lead:", err));
 
-    // 7. Exibição dos resultados na tela
-    const elEntrada = document.getElementById('resEntrada');
-    const elPrimeira = document.getElementById('resPrimeiraParcela');
-    const elUltima = document.getElementById('resUltimaParcela');
-    const elTotalPago = document.getElementById('resTotalPago');
-    const elTotalJuros = document.getElementById('resTotalJuros');
+    // --- RENDERIZAÇÃO DOS RESULTADOS NA TELA ---
+    const cardsContainer = document.getElementById('cardsContainer');
+    cardsContainer.innerHTML = `
+        <div class="card">
+            <div class="card-label">Valor Financiado</div>
+            <div class="card-value">${formatarMoeda(valorFinanciado)}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Sistema / Prazo</div>
+            <div class="card-value" style="font-size: 1rem; margin-top: 5px;">${sistema} (${prazoMeses} meses)</div>
+        </div>
+        <div class="card" style="border-left-color: #28a745;">
+            <div class="card-label">1ª Parcela Estimada</div>
+            <div class="card-value" style="color: #28a745;">${formatarMoeda(primeiraParcelaTotal)}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">${sistema === 'SAC' ? 'Última Parcela Estimada' : 'Parcela Fixa Estimada'}</div>
+            <div class="card-value">${formatarMoeda(ultimaParcelaTotal)}</div>
+        </div>
+    `;
 
-    if (elEntrada) elEntrada.innerText = entradaFormatada;
-    if (elPrimeira) elPrimeira.innerText = primeiraParcela;
-    if (elUltima) elUltima.innerText = ultimaParcela;
-    if (elTotalPago) elTotalPago.innerText = totalPago;
-    if (elTotalJuros) elTotalJuros.innerText = totalJuros;
+    // Prepara o link dinâmico do WhatsApp
+    const mensagemWhatsApp = encodeURIComponent(
+        `Olá! Me chamo ${nome}. Fiz uma simulação de financiamento no valor de ${formatarMoeda(valorImovel)} (financiando ${formatarMoeda(valorFinanciado)}) e gostaria de dar atendimento à minha análise de crédito.`
+    );
+    
+    document.getElementById('linkWhatsapp').href = `https://wa.me/5524999999999?text=${mensagemWhatsApp}`;
+
+    // Exibe o bloco de resultados
+    document.getElementById('resultado').style.display = 'block';
+
+    // Rola suavemente até os resultados
+    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth' });
 }
