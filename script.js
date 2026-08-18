@@ -1,156 +1,172 @@
-// URL do SheetMonkey configurada
-const ENDPOINT_SHEETMONKEY = "https://api.sheetmonkey.io/form/v5HTKnEFHJkrhqmVCAhDi1";
-
-// Converte taxa anual nominal/efetiva para taxa mensal equivalente
-function converterTaxaAnualParaMensal(taxaAnualPercentual) {
-    const taxaAnualDecimal = taxaAnualPercentual / 100;
-    return Math.pow(1 + taxaAnualDecimal, 1 / 12) - 1;
-}
-
-// Formatação de valores para moeda brasileira (R$)
-function formatarMoeda(valor) {
-    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-// Cálculo do SAC
-function calcularSAC(valorFinanciado, taxaAnualPercentual, prazoMeses) {
-    const i = converterTaxaAnualParaMensal(taxaAnualPercentual);
-    const amortizacaoConstante = valorFinanciado / prazoMeses;
-    
-    let saldoDevedor = valorFinanciado;
-    let totalJuros = 0;
-    
-    const primeiraParcelaBase = amortizacaoConstante + (saldoDevedor * i);
-    const ultimaParcelaBase = amortizacaoConstante + (amortizacaoConstante * i);
-
-    for (let mes = 1; mes <= prazoMeses; mes++) {
-        const jurosMes = saldoDevedor * i;
-        totalJuros += jurosMes;
-        saldoDevedor -= amortizacaoConstante;
+// ==========================================
+// CLASSE DE CÁLCULO (FINANCIAMENTO SAC/PRICE)
+// ==========================================
+class Financiar {
+    constructor(vP, i, n) {
+        this.vP = vP;                 // Valor Financiado
+        this.i = i;                   // Taxa de Juros ao mês (%)
+        this.n = n;                   // Prazo em meses
+        this.pmt = [];                // Array com as prestações
+        this.a = 0;                   // Amortização
+        this.totalJuros = 0;          // Total de juros
+        this.totalPago = 0;           // Total pago ao final
+        this.listaSacText = "";       // Lista de parcelas em texto
+        this.listaSacHTML = "";       // Lista de parcelas em HTML
     }
 
-    return {
-        primeiraParcela: primeiraParcelaBase,
-        ultimaParcela: ultimaParcelaBase,
-        totalJuros: totalJuros,
-        totalPago: valorFinanciado + totalJuros
-    };
+    // Trata valores vindos formatados como moeda (ex: "200.000,00")
+    tratarMascaraReal() {
+        if (typeof this.vP === 'string') {
+            this.vP = this.vP.replace(/\./g, "").replace(",", ".");
+        }
+        if (typeof this.i === 'string') {
+            this.i = this.i.replace(/\./g, "").replace(",", ".");
+        }
+    }
+
+    // Converte tipos para cálculos matemáticos
+    formataDados() {
+        this.vP = parseFloat(this.vP);
+        this.i = parseFloat(this.i) / 100; // Converte porcentagem para decimal
+        this.n = parseInt(this.n);
+    }
+
+    // Formata o número para padrão R$
+    formataMascara(label, valor) {
+        let formato = { minimumFractionDigits: 2, style: 'currency', currency: label };
+        return valor.toLocaleString('pt-BR', formato);
+    }
+
+    calculaAmortizacao() {
+        this.a = this.vP / this.n;
+        return this.a;
+    }
+
+    // Cálculo pela Tabela PRICE
+    financiarPrice() {
+        let prestacao = this.vP * (Math.pow((1 + this.i), this.n) * this.i) / (Math.pow((1 + this.i), this.n) - 1);
+        this.pmt = [prestacao];
+        return this.formataMascara('BRL', this.pmt[0]);
+    }
+
+    // Cálculo pela Tabela SAC
+    financiarSac() {
+        this.calculaAmortizacao();
+        this.pmt = [];
+        this.listaSacText = "";
+        this.listaSacHTML = "";
+
+        for (let y = 0; y < this.n; y++) {
+            let prestacao = this.a + this.i * (this.vP - (y * this.a));
+            this.pmt.push(prestacao);
+            this.listaSacText += (y + 1) + "ª prestação: " + this.formataMascara('BRL', prestacao) + "\n\r";
+            this.listaSacHTML += (y + 1) + "ª prestação: " + this.formataMascara('BRL', prestacao) + "<br>";
+        }
+    }
+
+    calculaTotalPagoPrice() {
+        this.totalPago = this.pmt[0] * this.n;
+        return this.formataMascara('BRL', this.totalPago);
+    }
+
+    calculaTotalJurosPrice() {
+        if (this.totalPago === 0) this.calculaTotalPagoPrice();
+        this.totalJuros = this.totalPago - this.vP;
+        return this.formataMascara('BRL', this.totalJuros);
+    }
+
+    calculaTotalPagoSac() {
+        this.totalPago = 0;
+        for (let p = 0; p < this.n; p++) {
+            this.totalPago += this.pmt[p];
+        }
+        return this.formataMascara('BRL', this.totalPago);
+    }
+
+    calculaTotalJurosSac() {
+        if (this.totalPago === 0) this.calculaTotalPagoSac();
+        this.totalJuros = this.totalPago - this.vP;
+        return this.formataMascara('BRL', this.totalJuros);
+    }
 }
 
-// Cálculo da Tabela Price
-function calcularPrice(valorFinanciado, taxaAnualPercentual, prazoMeses) {
-    const i = converterTaxaAnualParaMensal(taxaAnualPercentual);
-    const fator = Math.pow(1 + i, prazoMeses);
-    const parcelaFixa = valorFinanciado * ((i * fator) / (fator - 1));
-    
-    const totalPago = parcelaFixa * prazoMeses;
-    const totalJuros = totalPago - valorFinanciado;
+// ==========================================
+// CONFIGURAÇÃO E INTEGRAÇÃO DO SIMULADOR
+// ==========================================
 
-    return {
-        primeiraParcela: parcelaFixa,
-        ultimaParcela: parcelaFixa,
-        totalJuros: totalJuros,
-        totalPago: totalPago
-    };
-}
+// Cole o seu Endpoint do SheetMonkey aqui
+const ENDPOINT_SHEETMONKEY = 'https://api.sheetmonkey.io/form/v5HTKnEFHJkrhqmVCAhDi1';
 
-// Processa o formulário e envia os dados
-function processarSimulacao(e) {
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('formSimulador');
+    if (form) {
+        form.addEventListener('submit', processarSimulacao);
+    }
+});
+
+async function processarSimulacao(e) {
     e.preventDefault();
 
-    // Leitura dos dados do formulário
-    const nome = document.getElementById('nome').value;
-    const email = document.getElementById('email').value;
-    const telefone = document.getElementById('telefone').value;
-    const renda = parseFloat(document.getElementById('renda').value) || 0;
-    const valorImovel = parseFloat(document.getElementById('valorImovel').value) || 0;
-    const valorEntrada = parseFloat(document.getElementById('valorEntrada').value) || 0;
-    const prazoAnos = parseInt(document.getElementById('prazoAnos').value);
-    const sistema = document.getElementById('sistema').value;
-    const taxaAnual = parseFloat(document.getElementById('taxaAnual').value);
+    // 1. Leitura dos inputs do formulário
+    const valorImovel = document.getElementById('valorImovel').value;
+    const valorEntrada = document.getElementById('valorEntrada').value || "0";
+    const taxaAnual = document.getElementById('taxaAnual').value;
+    const prazoAnos = document.getElementById('prazoAnos').value;
 
-    const valorFinanciado = valorImovel - valorEntrada;
-    const prazoMeses = prazoAnos * 12;
+    // Converte entrada para cálculo do valor financiado real
+    const vImovelNum = parseFloat(valorImovel.toString().replace(/\./g, "").replace(",", ".")) || 0;
+    const vEntradaNum = parseFloat(valorEntrada.toString().replace(/\./g, "").replace(",", ".")) || 0;
+    const valorFinanciado = vImovelNum - vEntradaNum;
 
-    if (valorFinanciado <= 0) {
-        alert('O valor da entrada não pode ser igual ou maior que o valor do imóvel.');
-        return;
-    }
+    // Converte prazos e taxas (Anual para Mensal)
+    const prazoMeses = parseInt(prazoAnos) * 12;
+    const taxaMensal = parseFloat(taxaAnual.toString().replace(",", ".")) / 12;
 
-    // Estimativa de Seguros e Taxas (MIP + DFI + Taxa Adm)
-    const encargoEstimado = (valorFinanciado * 0.00025) + (valorImovel * 0.00005) + 25.00;
+    // 2. Executa a classe de cálculo (SAC por padrão)
+    const simulacao = new Financiar(valorFinanciado, taxaMensal, prazoMeses);
+    simulacao.formataDados();
+    simulacao.financiarSac();
 
-    let resultado;
-    if (sistema === 'SAC') {
-        resultado = calcularSAC(valorFinanciado, taxaAnual, prazoMeses);
-    } else {
-        resultado = calcularPrice(valorFinanciado, taxaAnual, prazoMeses);
-    }
+    const primeiraParcela = simulacao.formataMascara('BRL', simulacao.pmt[0]);
+    const ultimaParcela = simulacao.formataMascara('BRL', simulacao.pmt[simulacao.pmt.length - 1]);
+    const totalPago = simulacao.calculaTotalPagoSac();
+    const totalJuros = simulacao.calculaTotalJurosSac();
 
-    const primeiraParcelaTotal = resultado.primeiraParcela + encargoEstimado;
-    const ultimaParcelaTotal = resultado.ultimaParcela + encargoEstimado;
-
-    // --- ENVIO DOS DADOS PARA O SHEETMONKEY ---
+    // 3. Monta o objeto de Lead para o SheetMonkey
     const dadosLead = {
-        nome: nome,
-        email: email,
-        telefone: telefone,
-        renda: renda,
-        valorImovel: valorImovel,
-        valorEntrada: valorEntrada,
-        valorFinanciado: valorFinanciado,
-        prazoAnos: prazoAnos,
-        sistema: sistema,
-        primeiraParcela: primeiraParcelaTotal.toFixed(2),
-        ultimaParcela: ultimaParcelaTotal.toFixed(2),
-        dataHora: new Date().toLocaleString('pt-BR')
+        Nome: document.getElementById('nome').value,
+        Email: document.getElementById('email').value,
+        Telefone: document.getElementById('telefone').value,
+        ValorImovel: valorImovel,
+        ValorEntrada: valorEntrada,
+        ValorFinanciado: simulacao.formataMascara('BRL', simulacao.vP),
+        PrazoAnos: prazoAnos,
+        PrimeiraParcela: primeiraParcela,
+        UltimaParcela: ultimaParcela,
+        TotalPago: totalPago,
+        TotalJuros: totalJuros,
+        DataEnvio: new Date().toLocaleString('pt-BR')
     };
 
-    fetch(ENDPOINT_SHEETMONKEY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dadosLead)
-    })
-    .then(response => {
-        if (response.ok) {
-            console.log("Lead salvo com sucesso no SheetMonkey!");
-        } else {
-            console.error("Erro ao enviar dados para o SheetMonkey.");
-        }
-    })
-    .catch(err => console.error("Erro de rede ao salvar lead:", err));
+    // 4. Envio para o SheetMonkey
+    try {
+        await fetch(ENDPOINT_SHEETMONKEY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosLead)
+        });
+    } catch (error) {
+        console.error('Erro ao enviar para o SheetMonkey:', error);
+    }
 
-    // --- RENDERIZAÇÃO DOS RESULTADOS NA TELA ---
-    const cardsContainer = document.getElementById('cardsContainer');
-    cardsContainer.innerHTML = `
-        <div class="card">
-            <div class="card-label">Valor Financiado</div>
-            <div class="card-value">${formatarMoeda(valorFinanciado)}</div>
-        </div>
-        <div class="card">
-            <div class="card-label">Sistema / Prazo</div>
-            <div class="card-value" style="font-size: 1rem; margin-top: 5px;">${sistema} (${prazoMeses} meses)</div>
-        </div>
-        <div class="card" style="border-left-color: #28a745;">
-            <div class="card-label">1ª Parcela Estimada</div>
-            <div class="card-value" style="color: #28a745;">${formatarMoeda(primeiraParcelaTotal)}</div>
-        </div>
-        <div class="card">
-            <div class="card-label">${sistema === 'SAC' ? 'Última Parcela Estimada' : 'Parcela Fixa Estimada'}</div>
-            <div class="card-value">${formatarMoeda(ultimaParcelaTotal)}</div>
-        </div>
-    `;
+    // 5. Exibição dos resultados na tela
+    const elPrimeira = document.getElementById('resPrimeiraParcela');
+    const elUltima = document.getElementById('resUltimaParcela');
+    const elTotalPago = document.getElementById('resTotalPago');
+    const elTotalJuros = document.getElementById('resTotalJuros');
 
-    // Prepara o link dinâmico do WhatsApp
-    const mensagemWhatsApp = encodeURIComponent(
-        `Olá! Me chamo ${nome}. Fiz uma simulação de financiamento no valor de ${formatarMoeda(valorImovel)} (financiando ${formatarMoeda(valorFinanciado)}) e gostaria de dar atendimento à minha análise de crédito.`
-    );
-    
-    document.getElementById('linkWhatsapp').href = `https://wa.me/5524988114415?text=${mensagemWhatsApp}`;
-
-    // Exibe o bloco de resultados
-    document.getElementById('resultado').style.display = 'block';
-
-    // Rola suavemente até os resultados
-    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth' });
+    if (elPrimeira) elPrimeira.innerText = primeiraParcela;
+    if (elUltima) elUltima.innerText = ultimaParcela;
+    if (elTotalPago) elTotalPago.innerText = totalPago;
+    if (elTotalJuros) elTotalJuros.innerText = totalJuros;
 }
