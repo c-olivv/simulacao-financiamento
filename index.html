@@ -1,81 +1,93 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Financiamento Imobiliário</title>
-    <!-- Vincula o arquivo CSS externo -->
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Financiamento</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="container">
-    <h2>Simulador de Financiamento</h2>
-    
-    <form id="formSimulacao" onsubmit="processarSimulacao(event)">
-        <div class="form-group">
-            <label for="nome">Nome Completo</label>
-            <input type="text" id="nome" required placeholder="Digite seu nome">
-        </div>
+  <main class="container">
+    <h1>Simulador de Financiamento Imobiliário</h1>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="email">E-mail</label>
-                <input type="email" id="email" required placeholder="seu@email.com">
-            </div>
-            <div class="form-group">
-                <label for="telefone">Telefone / WhatsApp</label>
-                <input type="tel" id="telefone" required placeholder="(00) 00000-0000">
-            </div>
-        </div>
+    <!-- FORMULÁRIO DE ENTRADA DE DADOS -->
+    <form id="formSimulador">
+      
+      <div class="campo-grupo">
+        <label for="nome">Nome Completo</label>
+        <input type="text" id="nome" placeholder="Digite seu nome" required>
+      </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="renda">Renda Mensal (R$)</label>
-                <input type="number" id="renda" step="0.01" required placeholder="5000,00">
-            </div>
-            <div class="form-group">
-                <label for="valorImovel">Valor do Imóvel (R$)</label>
-                <input type="number" id="valorImovel" step="0.01" required placeholder="300000,00">
-            </div>
-        </div>
+      <div class="campo-grupo">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" placeholder="seuemail@exemplo.com" required>
+      </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="valorEntrada">Valor da Entrada (R$)</label>
-                <input type="number" id="valorEntrada" step="0.01" required placeholder="60000,00">
-            </div>
-            <div class="form-group">
-                <label for="prazoAnos">Prazo (Anos)</label>
-                <input type="number" id="prazoAnos" value="30" min="1" max="35" required>
-            </div>
-        </div>
+      <div class="campo-grupo">
+        <label for="telefone">WhatsApp / Telefone</label>
+        <input type="tel" id="telefone" placeholder="(00) 00000-0000" required>
+      </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="sistema">Sistema de Amortização</label>
-                <select id="sistema">
-                    <option value="SAC">SAC (Parcelas Decrescentes)</option>
-                    <option value="PRICE">PRICE (Parcelas Fixas)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="taxaAnual">Taxa de Juros Anual (%)</label>
-                <input type="number" id="taxaAnual" step="0.01" value="9.5" required>
-            </div>
-        </div>
+      <div class="campo-grupo">
+        <label for="rendaMensal">Renda Mensal Bruta (R$)</label>
+        <input type="text" id="rendaMensal" placeholder="Ex: 8.000,00" required>
+      </div>
 
-        <button type="submit" class="btn-submit">Simular Agora</button>
+      <div class="campo-grupo">
+        <label for="valorImovel">Valor do Imóvel (R$)</label>
+        <input type="text" id="valorImovel" placeholder="Ex: 300.000,00" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="valorEntrada">Entrada Disponível (R$)</label>
+        <input type="text" id="valorEntrada" placeholder="Ex: 60.000,00">
+      </div>
+
+      <div class="campo-grupo">
+        <label for="taxaAnual">Taxa de Juros Anual (%)</label>
+        <input type="text" id="taxaAnual" placeholder="Ex: 9,5" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="prazoAnos">Prazo do Financiamento (Anos)</label>
+        <input type="number" id="prazoAnos" placeholder="Ex: 30" required>
+      </div>
+
+      <button type="submit" id="btnSimular">Calcular Simulação</button>
     </form>
 
-    <div id="resultado">
-        <h3>Resultado da Simulação</h3>
-        <div class="cards-grid" id="cardsContainer"></div>
-        <a id="linkWhatsapp" class="cta-whatsapp" target="_blank">Falar com Consultor no WhatsApp</a>
-    </div>
-</div>
+    <!-- PAINEL DE EXIBIÇÃO DOS RESULTADOS -->
+    <section class="resultado-simulacao">
+      <h2>Resultado do Cálculo</h2>
 
-<!-- Vincula o arquivo JavaScript externo -->
-<script src="script.js"></script>
+      <div class="card-resultado">
+        <span>Entrada Necessária:</span>
+        <strong id="resEntrada">R$ 0,00</strong>
+      </div>
+
+      <div class="card-resultado">
+        <span>Primeira Parcela (Máx. 30% da Renda):</span>
+        <strong id="resPrimeiraParcela">R$ 0,00</strong>
+      </div>
+
+      <div class="card-resultado">
+        <span>Última Parcela:</span>
+        <strong id="resUltimaParcela">R$ 0,00</strong>
+      </div>
+
+      <div class="card-resultado">
+        <span>Total de Juros:</span>
+        <strong id="resTotalJuros">R$ 0,00</strong>
+      </div>
+
+      <div class="card-resultado">
+        <span>Total Pago ao Final:</span>
+        <strong id="resTotalPago">R$ 0,00</strong>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
 </body>
 </html>
