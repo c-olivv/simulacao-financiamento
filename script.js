@@ -1,68 +1,59 @@
-// URL do SheetMonkey configurada
+// Endpoint do SheetMonkey
 const ENDPOINT_SHEETMONKEY = "https://api.sheetmonkey.io/form/v5HTKnEFHJkrhqmVCAhDi1";
 
-// --- MÁSCARAS EM TEMPO REAL ---
+// ==========================================
+// FUNÇÕES AUXILIARES DE FORMATAÇÃO E MÁSCARAS
+// ==========================================
 
-// Máscara de Telefone/WhatsApp: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
-function aplicarMascaraTelefone(e) {
-    let valor = e.target.value.replace(/\D/g, "");
-    if (valor.length > 11) valor = valor.slice(0, 11);
-
-    if (valor.length > 10) {
-        valor = valor.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
-    } else if (valor.length > 6) {
-        valor = valor.replace(/^(\d{2})(\d{4})(\d{0,4})$/, "($1) $2-$3");
-    } else if (valor.length > 2) {
-        valor = valor.replace(/^(\d{2})(\d{0,5})$/, "($1) $2");
-    } else if (valor.length > 0) {
-        valor = valor.replace(/^(\d*)$/, "($1");
-    }
-    e.target.value = valor;
+// Formata números float para visualização em Moeda BRL (ex: 300000 -> "R$ 300.000,00")
+function formatarMoeda(valor) {
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// Máscara Moeda (Digitação a partir dos centavos)
-function aplicarMascaraMoeda(e) {
-    let valor = e.target.value.replace(/\D/g, "");
-    if (!valor) {
-        e.target.value = "";
+// Converte string formatada em R$ para float puro (ex: "R$ 300.000,00" -> 300000)
+function converterMoedaParaFloat(texto) {
+    if (!texto) return 0;
+    const apenasNumeros = texto.replace(/\D/g, '');
+    return parseFloat(apenasNumeros) / 100 || 0;
+}
+
+// Máscara de entrada para campos de moeda em tempo real
+function aplicarMascaraMoeda(input) {
+    let valor = input.value.replace(/\D/g, '');
+    if (valor === '') {
+        input.value = '';
         return;
     }
-    // Converte os dígitos acumulados em número decimal (ex: 12345 -> 123.45)
-    const numero = (parseFloat(valor) / 100).toFixed(2);
-    
-    // Formata no padrão R$ X.XXX,XX
-    e.target.value = parseFloat(numero).toLocaleString('pt-BR', {
+    const valorFloat = parseFloat(valor) / 100;
+    input.value = valorFloat.toLocaleString('pt-BR', {
         style: 'currency',
         currency: 'BRL'
     });
 }
 
-// Converte a string "R$ 300.000,00" para número float puro (300000.00)
-function converterMoedaParaNumero(textoMoeda) {
-    if (!textoMoeda) return 0;
-    const apenasNumeros = textoMoeda.replace(/\D/g, "");
-    return apenasNumeros ? parseFloat(apenasNumeros) / 100 : 0;
+// Máscara de entrada para telefone em tempo real: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
+function aplicarMascaraTelefone(input) {
+    let valor = input.value.replace(/\D/g, '');
+    if (valor.length > 11) valor = valor.slice(0, 11);
+
+    if (valor.length > 10) {
+        // Celular com 9 dígitos
+        input.value = valor.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+    } else if (valor.length > 6) {
+        // Telefone fixo ou digitando celular
+        input.value = valor.replace(/^(\d{2})(\d{4})(\d{0,4})$/, '($1) $2-$3');
+    } else if (valor.length > 2) {
+        input.value = valor.replace(/^(\d{2})(\d{0,5})$/, '($1) $2');
+    } else {
+        input.value = valor;
+    }
 }
 
-// Formatação padrão de exibição em tela
-function formatarMoeda(valor) {
-    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+// ==========================================
+// CÁLCULOS FINANCEIROS
+// ==========================================
 
-// Vincula os eventos de máscara aos inputs após carregar a página
-document.addEventListener("DOMContentLoaded", () => {
-    // Escuta evento no campo de telefone
-    document.getElementById("telefone").addEventListener("input", aplicarMascaraTelefone);
-
-    // Escuta eventos nos campos financeiros
-    const camposFinanceiros = ["renda", "valorImovel", "valorEntrada"];
-    camposFinanceiros.forEach(id => {
-        document.getElementById(id).addEventListener("input", aplicarMascaraMoeda);
-    });
-});
-
-// --- LÓGICA DE CÁLCULO FINANCEIRO ---
-
+// Cálculo do SAC (Parcelas Decrescentes)
 function calcularSAC(valorFinanciado, taxaMensal, prazoMeses) {
     const amortizacaoConstante = valorFinanciado / prazoMeses;
     const primeiraParcelaBase = amortizacaoConstante + (valorFinanciado * taxaMensal);
@@ -74,6 +65,7 @@ function calcularSAC(valorFinanciado, taxaMensal, prazoMeses) {
     };
 }
 
+// Cálculo da Tabela Price (Parcelas Fixas)
 function calcularPrice(valorFinanciado, taxaMensal, prazoMeses) {
     const fator = Math.pow(1 + taxaMensal, prazoMeses);
     const parcelaFixa = valorFinanciado * ((taxaMensal * fator) / (fator - 1));
@@ -84,25 +76,28 @@ function calcularPrice(valorFinanciado, taxaMensal, prazoMeses) {
     };
 }
 
-// Processa o formulário e envia os dados
-function processarSimulacao(e) {
+// ==========================================
+// PROCESSAMENTO DO FORMULÁRIO
+// ==========================================
+
+async function processarSimulacao(e) {
     e.preventDefault();
 
-    // Leitura e conversão dos dados do formulário
+    // Leitura dos dados do formulário
     const nome = document.getElementById('nome').value;
     const email = document.getElementById('email').value;
     const telefone = document.getElementById('telefone').value;
     
-    // Leitura convertida dos campos formatados em R$
-    const renda = converterMoedaParaNumero(document.getElementById('renda').value);
-    const valorImovel = converterMoedaParaNumero(document.getElementById('valorImovel').value);
-    const valorEntrada = converterMoedaParaNumero(document.getElementById('valorEntrada').value);
+    // Converte os campos formatados em moeda para float puro
+    const renda = converterMoedaParaFloat(document.getElementById('renda').value);
+    const valorImovel = converterMoedaParaFloat(document.getElementById('valorImovel').value);
+    const valorEntrada = converterMoedaParaFloat(document.getElementById('valorEntrada').value);
     
-    const prazoAnos = parseInt(document.getElementById('prazoAnos').value);
+    const prazoAnos = parseInt(document.getElementById('prazoAnos').value, 10);
     const sistema = document.getElementById('sistema').value;
     const taxaAnual = parseFloat(document.getElementById('taxaAnual').value);
 
-    // Validação de Entrada Mínima (20%)
+    // Validação da Entrada Mínima (20% do valor do imóvel)
     const entradaMinima = valorImovel * 0.20;
     const entradaAbaixoDoMinimo = valorEntrada < entradaMinima;
 
@@ -112,7 +107,7 @@ function processarSimulacao(e) {
     const prazoMeses = prazoAnos * 12;
     const taxaMensal = (taxaAnual / 100) / 12;
 
-    // Encargos acessórios estimados
+    // Encargos acessórios estimados (Seguros MIP/DFI + Taxa de Administração)
     const encargoEstimado = (valorFinanciado * 0.00025) + (valorImovel * 0.00005) + 25.00;
 
     let resultado;
@@ -125,43 +120,11 @@ function processarSimulacao(e) {
     const primeiraParcelaTotal = resultado.primeiraParcela + encargoEstimado;
     const ultimaParcelaTotal = resultado.ultimaParcela + encargoEstimado;
 
-    // Comprometimento de Renda (30%)
+    // Verificação de Comprometimento de Renda (Máximo de 30%)
     const limiteRenda = renda * 0.30;
     const excedeRenda = primeiraParcelaTotal > limiteRenda;
 
-    // --- ENVIO DOS DADOS PARA O SHEETMONKEY ---
-    const dadosLead = {
-        nome: nome,
-        email: email,
-        telefone: telefone,
-        renda: renda,
-        valorImovel: valorImovel,
-        valorEntrada: valorEntrada,
-        valorFinanciado: valorFinanciado,
-        prazoAnos: prazoAnos,
-        sistema: sistema,
-        primeiraParcela: primeiraParcelaTotal.toFixed(2),
-        ultimaParcela: ultimaParcelaTotal.toFixed(2),
-        entradaAbaixoDoMinimo: entradaAbaixoDoMinimo ? "SIM" : "NÃO",
-        comprometeuRenda: excedeRenda ? "SIM" : "NÃO",
-        dataHora: new Date().toLocaleString('pt-BR')
-    };
-
-    fetch(ENDPOINT_SHEETMONKEY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dadosLead)
-    })
-    .then(response => {
-        if (response.ok) {
-            console.log("Lead salvo com sucesso no SheetMonkey!");
-        } else {
-            console.error("Erro ao enviar dados para o SheetMonkey.");
-        }
-    })
-    .catch(err => console.error("Erro de rede ao salvar lead:", err));
-
-    // --- RENDERIZAÇÃO DOS RESULTADOS NA TELA ---
+    // Renderização dos Resultados na Tela
     const cardsContainer = document.getElementById('cardsContainer');
     cardsContainer.innerHTML = `
         <div class="card">
@@ -182,7 +145,7 @@ function processarSimulacao(e) {
         </div>
     `;
 
-    // Exibe avisos se necessário
+    // Aviso de entrada abaixo de 20%
     if (entradaAbaixoDoMinimo) {
         cardsContainer.innerHTML += `
             <div style="grid-column: 1 / -1; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; margin-top: 10px;">
@@ -191,6 +154,7 @@ function processarSimulacao(e) {
         `;
     }
 
+    // Aviso de comprometimento de renda
     if (excedeRenda) {
         cardsContainer.innerHTML += `
             <div style="grid-column: 1 / -1; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; margin-top: 10px;">
@@ -203,10 +167,66 @@ function processarSimulacao(e) {
     const mensagemWhatsApp = encodeURIComponent(
         `Olá! Me chamo ${nome}. Fiz uma simulação de financiamento no valor de ${formatarMoeda(valorImovel)} e gostaria de tirar dúvidas sobre minha análise de crédito.`
     );
-    
     document.getElementById('linkWhatsapp').href = `https://wa.me/5524988114415?text=${mensagemWhatsApp}`;
 
-    // Exibe o bloco de resultados e rola a tela
+    // Exibe o bloco de resultados e rola a página
     document.getElementById('resultado').style.display = 'block';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth' });
+
+    // Envio dos Dados para o SheetMonkey
+    const dadosLead = {
+        nome: nome,
+        email: email,
+        telefone: telefone,
+        renda: renda,
+        valorImovel: valorImovel,
+        valorEntrada: valorEntrada,
+        valorFinanciado: valorFinanciado,
+        prazoAnos: prazoAnos,
+        sistema: sistema,
+        primeiraParcela: primeiraParcelaTotal.toFixed(2),
+        ultimaParcela: ultimaParcelaTotal.toFixed(2),
+        entradaAbaixoDoMinimo: entradaAbaixoDoMinimo ? "SIM" : "NÃO",
+        comprometeuRenda: excedeRenda ? "SIM" : "NÃO",
+        dataHora: new Date().toLocaleString('pt-BR')
+    };
+
+    try {
+        const response = await fetch(ENDPOINT_SHEETMONKEY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosLead)
+        });
+
+        if (response.ok) {
+            console.log("Lead salvo com sucesso no SheetMonkey!");
+        } else {
+            console.error("Erro ao enviar dados para o SheetMonkey. Status:", response.status);
+        }
+    } catch (err) {
+        console.error("Erro de rede ao salvar lead:", err);
+    }
 }
+
+// ==========================================
+// VINCULAÇÃO DOS EVENTOS (DOM LOADED)
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Vincula a máscara nos campos de moeda
+    const camposMoeda = ['renda', 'valorImovel', 'valorEntrada'];
+    camposMoeda.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            // Garante tipo text para aceitar os caracteres R$ e vírgulas sem conflito de HTML5
+            input.type = 'text';
+            input.addEventListener('input', (e) => aplicarMascaraMoeda(e.target));
+        }
+    });
+
+    // Vincula a máscara no campo de telefone
+    const inputTelefone = document.getElementById('telefone');
+    if (inputTelefone) {
+        inputTelefone.addEventListener('input', (e) => aplicarMascaraTelefone(e.target));
+    }
+});
