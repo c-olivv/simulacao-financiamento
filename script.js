@@ -158,7 +158,7 @@ async function processarSimulacao(e) {
     if (excedeRenda) {
         cardsContainer.innerHTML += `
             <div style="grid-column: 1 / -1; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; margin-top: 10px;">
-                ⚠️ <strong>Atenção:</strong> A 1ª parcela excede 30% da renda informada (${formatarMoeda(limiteRenda)}). Podemos ajudar você a compor renda com mais familiares no atendimento.
+                ⚠️ <strong>Atenção:</strong> A 1ª parcela excede 30% da renda informada (${formatarMoeda(limiteRenda)}). Fale com nosso consultor no WhatsApp para analisar possibilidades de composição de renda.
             </div>
         `;
     }
