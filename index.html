@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simulador de Financiamento Imobiliário</title>
-    <!-- Vincula o arquivo CSS externo -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,25 +24,25 @@
             </div>
             <div class="form-group">
                 <label for="telefone">Telefone / WhatsApp</label>
-                <input type="tel" id="telefone" required placeholder="(00) 00000-0000">
+                <input type="tel" id="telefone" required placeholder="(00) 00000-0000" maxlength="15">
             </div>
         </div>
 
         <div class="form-row">
             <div class="form-group">
                 <label for="renda">Renda Mensal (R$)</label>
-                <input type="number" id="renda" step="0.01" required placeholder="5000,00">
+                <input type="text" id="renda" inputmode="numeric" required placeholder="R$ 0,00">
             </div>
             <div class="form-group">
                 <label for="valorImovel">Valor do Imóvel (R$)</label>
-                <input type="number" id="valorImovel" step="0.01" required placeholder="300000,00">
+                <input type="text" id="valorImovel" inputmode="numeric" required placeholder="R$ 0,00">
             </div>
         </div>
 
         <div class="form-row">
             <div class="form-group">
                 <label for="valorEntrada">Valor da Entrada (R$)</label>
-                <input type="number" id="valorEntrada" step="0.01" required placeholder="60000,00">
+                <input type="text" id="valorEntrada" inputmode="numeric" required placeholder="R$ 0,00">
             </div>
             <div class="form-group">
                 <label for="prazoAnos">Prazo (Anos)</label>
@@ -75,7 +74,6 @@
     </div>
 </div>
 
-<!-- Vincula o arquivo JavaScript externo -->
 <script src="script.js"></script>
 </body>
 </html>
